@@ -1,0 +1,13 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# Caddy fetches and renews Let's Encrypt certs automatically once DNS points here.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
+
+grafana.{$DOMAIN} {
+	reverse_proxy grafana:3000
+}

@@ -1,0 +1,11 @@
+# Local overrides: build the app from source and expose service ports.
+# docker compose -f infra/compose.yml -f infra/compose.dev.yml --env-file .env.example up -d --build
+services:
+  app:
+    build: { context: .., args: { APP_VERSION: local } }
+  postgres:
+    ports: ["5432:5432"]
+  redis:
+    ports: ["6379:6379"]
+  s3:
+    ports: ["8333:8333"]
