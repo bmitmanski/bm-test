@@ -259,7 +259,7 @@ infra/scripts/server-env.sh SENTRY_DSN="<DSN of bm-test-api>"
 ```
 
 **10.5. Deploy and test**: push to `main`, then click the test-failure buttons and open Sentry → **Issues**.
-If browser errors don't show up, disable your ad blocker for the site; many block requests to `sentry.io`.
+Browser events go through `/sentry-tunnel` on your own domain, so ad blockers don't drop them.
 
 ## Rollback
 

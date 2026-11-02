@@ -209,13 +209,13 @@ Off unless a DSN is set: local dev and tests send nothing.
 - **Releases**: each deploy creates a release (the *Sentry release* step in `deploy.yml`). An issue shows the release it first appeared in, which answers "which deploy broke this?".
 - **Alerts**: each new project gets a default rule that e-mails you on a **new issue**. Add more in Alerts, e.g. "more than 10 events in 1 hour".
 - The same button click shows up in Grafana (counts, alerts) **and** in Sentry (the details). Use Grafana to notice, Sentry to understand.
+- **Tunnel**: ad blockers block requests to `sentry.io`, so the browser SDK sends to `/sentry-tunnel` on your own domain instead. The web container's Caddy forwards those requests to the `bm-test-web` project only. The target comes from the DSN at build time (`web/Dockerfile`, `web/Caddyfile`).
 
 Free-plan limits: about 5k errors and 10k performance events a month. Lower `tracesSampleRate` if you get close.
 
 ## Still missing
 
 - **Sentry: suspect commits**: install the GitHub integration in Sentry, then change `set_commits: skip` to `auto` in `deploy.yml`. Sentry then points at the commit that probably caused an issue.
-- **Sentry tunnel**: ad blockers often block requests to `sentry.io`. A `tunnel` endpoint under `/api` would route browser events through your own domain.
 - **Tracing** (OpenTelemetry → Tempo): how long each step of a request takes (DB, Redis, S3).
 - **Grafana protection**: basic auth or an IP allowlist in Caddy.
 - **Postgres and Redis metrics**: Alloy has `prometheus.exporter.postgres` and `prometheus.exporter.redis` built in.
