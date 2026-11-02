@@ -12,6 +12,10 @@ import { Readable } from "node:stream";
 import type { Config } from "./config";
 import type { Deps } from "./app";
 
+export class StorageError extends Error {
+  name = "StorageError";
+}
+
 export async function createServices(config: Config) {
   const db = new Pool({ connectionString: config.databaseUrl });
   // Placeholder for a real migration tool (node-pg-migrate, drizzle-kit, ...).
@@ -33,9 +37,16 @@ export async function createServices(config: Config) {
   const Bucket = config.s3.bucket;
   await s3.send(new HeadBucketCommand({ Bucket })).catch(() => s3.send(new CreateBucketCommand({ Bucket })));
 
+  // S3 messages are generic ("We encountered an internal error, please try again."): name the operation,
+  // so log lines and Sentry issue titles say what failed. The original error stays as `cause`.
+  const storageError = (op: string) => (err: unknown): never => {
+    const { name, message } = err as Error;
+    throw new StorageError(`S3 ${op} on bucket "${Bucket}" failed: ${name}: ${message}`, { cause: err });
+  };
+
   const storage: Deps["storage"] = {
     async put(key, body, contentType) {
-      await s3.send(new PutObjectCommand({ Bucket, Key: key, Body: body, ContentType: contentType }));
+      await s3.send(new PutObjectCommand({ Bucket, Key: key, Body: body, ContentType: contentType })).catch(storageError("PutObject"));
     },
     async get(key) {
       try {
@@ -43,7 +54,7 @@ export async function createServices(config: Config) {
         return { body: res.Body as Readable, contentType: res.ContentType };
       } catch (err) {
         if (err instanceof NoSuchKey) return null;
-        throw err;
+        return storageError("GetObject")(err);
       }
     },
     async ping() {
