@@ -26,6 +26,8 @@ services:
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DEBUG_ROUTES: ${DEBUG_ROUTES:-false}
+      SENTRY_DSN: ${SENTRY_DSN:-} # empty = Sentry disabled
+      SENTRY_ENVIRONMENT: production
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       S3_ENDPOINT: http://s3:8333

@@ -134,11 +134,13 @@ export function buildApp(deps: Deps, { fastify = {}, metrics = createMetrics({ d
     // A dependency fails -> 500 with a different error (simulates DB being down).
     app.get("/debug/db-error", async () => deps.db.query("SELECT * FROM table_that_does_not_exist"));
 
-    // Process dies -> Docker restarts it; visible as `up == 0` and a restart in logs.
+    // Uncaught exception outside any request -> Sentry reports it, the process dies, Docker restarts it.
     app.post("/debug/crash", async (req, reply) => {
-      req.log.fatal("Crash requested from UI, exiting");
+      req.log.fatal("Crash requested from UI");
       reply.send({ crashing: true });
-      setTimeout(() => process.exit(1), 100);
+      setTimeout(() => {
+        throw new Error("Test crash: uncaught exception triggered from UI");
+      }, 100);
     });
   }
 

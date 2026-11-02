@@ -227,6 +227,40 @@ GCP → Monitoring → Uptime checks → Create:
 
 Test: `docker compose stop app` on the server → did the e-mail arrive? Then `docker compose start app`.
 
+## 10. Sentry (bug tracker)
+
+Until this step is done, Sentry is simply off: the SDKs are no-ops and CI skips the upload and release steps.
+
+**10.1. Account and projects** at https://sentry.io (free Developer plan):
+
+- Create an organization. Its **slug** is in the URL: `https://<org-slug>.sentry.io`.
+- Create project **bm-test-api**, platform *Node.js*.
+- Create project **bm-test-web**, platform *Browser JavaScript*.
+- For each project, copy its **DSN** from Project settings → Client Keys (DSN).
+
+**10.2. Auth token** for source map upload and releases: Settings → Developer Settings → **Organization Tokens** → Create. Copy it now; it is shown only once.
+
+**10.3. GitHub** (repo-level, because the build job runs outside the `production` environment):
+
+```bash
+gh secret set SENTRY_AUTH_TOKEN      --body "<org auth token>"
+gh variable set SENTRY_ORG           --body "<org-slug>"
+gh variable set SENTRY_PROJECT_API   --body "bm-test-api"
+gh variable set SENTRY_PROJECT_WEB   --body "bm-test-web"
+gh variable set SENTRY_DSN_WEB       --body "<DSN of bm-test-web>"
+```
+
+The frontend DSN is public by design (it ends up in the JS bundle), so a variable is fine. Only the auth token is a secret.
+
+**10.4. Server**: the API DSN goes into `/opt/app/.env`. Without `--apply` the next deploy picks it up:
+
+```bash
+infra/scripts/server-env.sh SENTRY_DSN="<DSN of bm-test-api>"
+```
+
+**10.5. Deploy and test**: push to `main`, then click the test-failure buttons and open Sentry → **Issues**.
+If browser errors don't show up, disable your ad blocker for the site; many block requests to `sentry.io`.
+
 ## Rollback
 
 Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older commit (no image rebuild).
@@ -236,7 +270,7 @@ Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older comm
 
 - [x] Frontend (SPA) behind Caddy, API under `/api` (same domain, no CORS)
 - [x] Metrics (Prometheus) + dashboard + alerts in Grafana, see [OBSERVABILITY.md](OBSERVABILITY.md)
-- [ ] Sentry (API + frontend, release = SHA, source maps from CI)
+- [x] Sentry (API + frontend, release = SHA, source maps from CI), see step 10
 - [ ] Protect Grafana (basic auth / IP allowlist)
 - [ ] Deploy via Workload Identity Federation + IAP (port 22 closed, no SSH key in secrets)
 - [ ] DB migrations in the pipeline, integration tests in CI

@@ -1,8 +1,19 @@
 import "./style.css";
+import * as Sentry from "@sentry/browser";
+
+// Without VITE_SENTRY_DSN (local dev) the SDK does nothing.
+// Captures uncaught errors and unhandled rejections on its own; tracing links browser and API spans.
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  environment: import.meta.env.PROD ? "production" : "development",
+  release: import.meta.env.VITE_APP_VERSION,
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 0.2,
+});
 
 const API = "/api";
 
-// --- frontend error reporting: every uncaught browser error goes to the API logs/metrics ---
+// --- frontend error reporting: also to the API, so browser errors show up in Grafana metrics/alerts ---
 function reportClientError(message: string, stack?: string) {
   fetch(`${API}/client-errors`, {
     method: "POST",

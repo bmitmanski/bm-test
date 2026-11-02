@@ -1,6 +1,6 @@
 # bm-test: owning the full stack, A to Z
 
-A small app (Fastify API + Vite frontend, TypeScript) with all the infrastructure around it: domain → VM → GitHub Actions (checks + deploy) → Postgres, Redis, S3 storage → logs, metrics and alerts in Grafana.
+A small app (Fastify API + Vite frontend, TypeScript) with all the infrastructure around it: domain → VM → GitHub Actions (checks + deploy) → Postgres, Redis, S3 storage → logs, metrics and alerts in Grafana, errors in Sentry.
 
 ```
                  GitHub (push to main)
@@ -22,10 +22,12 @@ A small app (Fastify API + Vite frontend, TypeScript) with all the infrastructur
                  ├─ s3         SeaweedFS (S3-compatible)
                  ├─ alloy ──►  loki + prometheus ──► grafana (dashboard, alerts)
                  └─ cron: backup.sh (pg_dump)
+
+  Sentry (SaaS) ◄── exceptions + traces from browser and API
 ```
 
 > Step-by-step setup on GCP: [docs/SETUP-GCP.md](docs/SETUP-GCP.md)
-> Logs, metrics, alerts, Grafana and test scenarios: [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)
+> Logs, metrics, alerts, Grafana, Sentry and test scenarios: [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)
 
 ## Where to host it for free
 
@@ -93,7 +95,6 @@ Manual rollback: Actions → **Deploy** → *Run workflow* → `image_tag` = SHA
 ## Not here yet (the next big steps)
 
 - **Off-site backups**: `backup.sh` writes to the same disk. Add disk snapshots, or copy dumps to a bucket, and test a restore.
-- **Sentry**: error grouping, user context, source maps (today there is only `/api/client-errors`).
 - **DB migrations**: today `CREATE TABLE IF NOT EXISTS` at startup. Use a tool (drizzle-kit, node-pg-migrate) as a deploy step.
 - **Secrets management**: `.env` is edited by hand on the server. Next: SOPS + age in the repo, or Infisical/Doppler.
 - **Infrastructure as Code**: the VM and DNS are clicked together. OpenTofu/Terraform, and Ansible instead of `bootstrap-vps.sh`.

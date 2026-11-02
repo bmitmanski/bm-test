@@ -1,4 +1,4 @@
-# Observability: logs, metrics, alerts
+# Observability: logs, metrics, alerts, errors
 
 ```
  browser ──(window.onerror)──┐
@@ -11,6 +11,8 @@
                                               \                 /
                                                ▼               ▼
                                      Grafana: dashboard + alerts ──► e-mail
+
+ browser + API ── exceptions, traces ──► Sentry (issues, releases, source maps) ──► e-mail
 ```
 
 | What | Where | Retention |
@@ -18,6 +20,16 @@
 | Logs of every container | Loki | 7 days |
 | App and server metrics | Prometheus | 15 days |
 | Dashboard, alert rules, e-mail contact point | files in `infra/grafana/` (provisioning) | in the repo |
+| Exceptions with stack traces and context | Sentry (SaaS) | 30 days on the free plan |
+
+**Which tool for which question:**
+
+| Question | Tool |
+|---|---|
+| Is it up? Is it getting slower? How many errors per minute? | Grafana (metrics) |
+| What happened around 14:32, across all services? | Grafana (Loki logs) |
+| **Which** errors exist, where in the code, how many users, since which release? | **Sentry** |
+| Wake me up when something breaks | Grafana alerts (system health) + Sentry alerts (new or regressed errors) |
 
 ## What you can do in Grafana
 
@@ -173,9 +185,37 @@ Lessons worth remembering from these tests:
 - **Alerts have latency**: scrape (15 s) + rule evaluation (every 1 min) + `for` + `group_wait` (30 s). Expect the e-mail 1–3 minutes after the event.
 - **The very first error right after the API starts** may not be counted if it happens before the first scrape.
 
+## Sentry: reviewing errors
+
+Setup steps: [SETUP-GCP.md, step 10](SETUP-GCP.md#10-sentry-bug-tracker).
+
+What is wired up:
+
+| | API (`@sentry/node`, `src/instrument.ts`) | Frontend (`@sentry/browser`, `web/src/main.ts`) |
+|---|---|---|
+| Captured | unhandled errors in requests that end in **5xx**, uncaught exceptions (crash), startup failures | uncaught errors, unhandled promise rejections |
+| Not captured | 4xx (client mistakes; they are in metrics) | — |
+| Release | `APP_VERSION` = commit SHA | the same SHA, baked in at build time |
+| Readable stack traces | compiled JS is close to the TS source | **source maps** uploaded from CI, then removed from the image |
+| Tracing (20% sample) | Fastify, pg, ioredis spans | page load + `fetch` to `/api`, linked to the API trace |
+
+Off unless a DSN is set: local dev and tests send nothing.
+
+**How to work with it:**
+
+- **Issues**: every distinct error is one issue, with all occurrences grouped by stack trace. Sort by *Events* or *Users* to see what hurts most.
+- **Issue page**: the stack trace (with your TypeScript source for the frontend), **breadcrumbs** (clicks, `fetch` calls and console logs just before the error), browser/OS, URL, release, and the linked **trace** (browser request → API → Postgres).
+- **Triage**: *Resolve* when fixed. If the error comes back in a later release, Sentry marks it **Regressed** and notifies you. *Archive* (ignore) known noise, *Assign* to a person.
+- **Releases**: each deploy creates a release (the *Sentry release* step in `deploy.yml`). An issue shows the release it first appeared in, which answers "which deploy broke this?".
+- **Alerts**: each new project gets a default rule that e-mails you on a **new issue**. Add more in Alerts, e.g. "more than 10 events in 1 hour".
+- The same button click shows up in Grafana (counts, alerts) **and** in Sentry (the details). Use Grafana to notice, Sentry to understand.
+
+Free-plan limits: about 5k errors and 10k performance events a month. Lower `tracesSampleRate` if you get close.
+
 ## Still missing
 
-- **Sentry**: error grouping, full context (browser, user, breadcrumbs), source maps. `/api/client-errors` is the minimal version.
+- **Sentry: suspect commits**: install the GitHub integration in Sentry, then change `set_commits: skip` to `auto` in `deploy.yml`. Sentry then points at the commit that probably caused an issue.
+- **Sentry tunnel**: ad blockers often block requests to `sentry.io`. A `tunnel` endpoint under `/api` would route browser events through your own domain.
 - **Tracing** (OpenTelemetry → Tempo): how long each step of a request takes (DB, Redis, S3).
 - **Grafana protection**: basic auth or an IP allowlist in Caddy.
 - **Postgres and Redis metrics**: Alloy has `prometheus.exporter.postgres` and `prometheus.exporter.redis` built in.

@@ -57,7 +57,14 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.web_image }}
-          build-args: APP_VERSION=${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            SENTRY_DSN=${{ vars.SENTRY_DSN_WEB }}
+            SENTRY_ORG=${{ vars.SENTRY_ORG }}
+            SENTRY_PROJECT=${{ vars.SENTRY_PROJECT_WEB }}
+          # Uploads source maps to Sentry during the build (skipped when the secret is empty).
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
@@ -69,6 +76,7 @@ jobs:
       name: production
       url: https://${{ vars.DOMAIN }}
     env:
+      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }} # secrets can't be used in `if:` directly
       APP_IMAGE: ${{ needs.build.outputs.app_image || format('ghcr.io/{0}:{1}', github.repository, inputs.image_tag) }}
       WEB_IMAGE: ${{ needs.build.outputs.web_image || format('ghcr.io/{0}-web:{1}', github.repository, inputs.image_tag) }}
       SSH: ssh -i ~/.ssh/id_deploy ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
@@ -97,3 +105,16 @@ jobs:
             sleep 3
           done
           exit 1
+
+      # Marks the deploy in Sentry: issues show "first seen in release X", regressions are detected.
+      - name: Sentry release
+        if: ${{ vars.SENTRY_ORG != '' && env.HAS_SENTRY_TOKEN == 'true' }}
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+        with:
+          release: ${{ inputs.image_tag || github.sha }}
+          projects: ${{ vars.SENTRY_PROJECT_API }} ${{ vars.SENTRY_PROJECT_WEB }}
+          environment: production
+          set_commits: skip # needs the GitHub integration in Sentry; enable it later for "suspect commits"
