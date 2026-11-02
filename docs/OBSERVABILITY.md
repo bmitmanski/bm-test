@@ -50,9 +50,10 @@
    - **Overview**: is the API up, requests/s, 5xx, p95 latency, frontend errors, restarts.
    - **HTTP**: traffic by status, latency per endpoint, 4xx vs 5xx vs frontend, business events.
    - **Node.js runtime and server**: CPU, RAM and disk of the VM, API memory, event loop lag.
-   - **Logs**: errors, business events and all API logs.
-3. **Explore**: pick **Loki** or **Prometheus** and try the queries below.
-4. **Alerting → Alert rules**: *Normal* = fine, *Pending* = condition true but still within `for`, *Firing* = alert sent.
+   - **Logs**: a **Requests** table (time, method, URL, status, ms; sortable and filterable per column), errors, a business events table and a compact view of all API logs. Expand a log line for every JSON field, e.g. the stack trace.
+3. **Drilldown → Logs**: the quickest way to browse logs of any container without writing a query. It parses the JSON, so you can filter by fields (`status`, `url`, `level`) in a few clicks and see recurring log patterns.
+4. **Explore**: pick **Loki** or **Prometheus** and try the queries below.
+5. **Alerting → Alert rules**: *Normal* = fine, *Pending* = condition true but still within `for`, *Firing* = alert sent.
 
 ### Useful queries
 
@@ -62,7 +63,8 @@ Loki (LogQL):
 {service="app", level="error"}                         # API and frontend errors
 {service="app"} | json | event="file.uploaded"         # one business event
 {service="app"} | json | source="frontend"             # browser errors
-{service="app"} | json | responseTime > 1000           # slow requests
+{service="app"} | json | msg="request" | ms > 1000     # slow requests (one "request" line per request)
+{service="app"} | json | msg="request" | status >= 500 # failed requests
 {service="postgres"} |= "ERROR"                        # database errors
 {service="caddy"}                                      # reverse proxy logs (certificates!)
 sum by (level) (count_over_time({service="app"}[5m]))  # log volume by level
@@ -175,7 +177,7 @@ The **Test failures** buttons only work with `DEBUG_ROUTES=true` in `/opt/app/.e
 | Server error (500) | `level=error` with a stack trace | `http_errors_total{class="5xx"}` | **Server errors (5xx)** |
 | Database error (500) | an error in the API **and** `ERROR` in the Postgres logs | 5xx | **5xx** and **Errors in Postgres logs** |
 | Validation error (400) | `level=info`, status 400 | `class="4xx"` | none, and that's correct |
-| Slow request | `responseTime` ~2500 | p95 latency goes up | **Slow API**, if clicked a few times |
+| Slow request | `ms` ~2500 on the `request` line | p95 latency goes up | **Slow API**, if clicked a few times |
 | JS error / unhandled rejection | `source="frontend"`, `level=error` | `frontend_errors_total` | **Frontend JS errors** |
 | Crash the API process | `level=fatal`, then startup logs | `process_start_time_seconds` changes | **API restarted** |
 

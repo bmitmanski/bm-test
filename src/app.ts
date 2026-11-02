@@ -1,4 +1,4 @@
-import Fastify, { FastifyServerOptions } from "fastify";
+import Fastify, { FastifyReply, FastifyRequest, FastifyServerOptions, LogController } from "fastify";
 import multipart from "@fastify/multipart";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -23,8 +23,21 @@ export interface AppOptions {
   debugRoutes?: boolean;
 }
 
+// One compact line per request instead of Fastify's two verbose ones ("incoming request" + "request completed").
+// 5xx errors are still logged by Fastify with the stack trace (defaultErrorLog).
+class RequestLogController extends LogController {
+  incomingRequest() {}
+
+  requestCompleted(_error: unknown, req: FastifyRequest, reply: FastifyReply) {
+    const route = req.routeOptions.url ?? "unmatched";
+    // Scrapes and healthchecks run every few seconds: debug level keeps them out of production logs.
+    const level = route === "/metrics" || route === "/health" ? "debug" : reply.statusCode >= 400 ? "warn" : "info";
+    reply.log[level]({ method: req.method, url: req.url, route, status: reply.statusCode, ms: Math.round(reply.elapsedTime) }, "request");
+  }
+}
+
 export function buildApp(deps: Deps, { fastify = {}, metrics = createMetrics({ defaultMetrics: false }), debugRoutes = false }: AppOptions = {}) {
-  const app = Fastify(fastify);
+  const app = Fastify({ logController: new RequestLogController(), ...fastify });
   app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
   const track = (event: string, data: Record<string, unknown> = {}) => {

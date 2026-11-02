@@ -799,8 +799,9 @@
       }
     },
     {
-      "type": "logs",
-      "title": "Errors (API + frontend)",
+      "type": "table",
+      "title": "Requests",
+      "description": "One line per API request (healthchecks and /metrics scrapes are logged at debug level, so not here). Click a column header to sort, the funnel icon to filter.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -812,14 +813,164 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=\"app\", level=~\"error|fatal\"}"
+          "expr": "{service=\"app\"} | json | msg=\"request\"",
+          "queryType": "range",
+          "maxLines": 500
         }
       ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "json",
+            "replace": false,
+            "keepTime": false
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "Time": true,
+              "method": true,
+              "url": true,
+              "status": true,
+              "ms": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "method": 1,
+              "url": 2,
+              "status": 3,
+              "ms": 4
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "method"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 400
+                    },
+                    {
+                      "color": "red",
+                      "value": 500
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ms"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 500
+                    },
+                    {
+                      "color": "red",
+                      "value": 1000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      },
       "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending",
-        "enableLogDetails": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Time",
+            "desc": true
+          }
+        ]
       },
       "id": 18,
       "gridPos": {
@@ -831,7 +982,8 @@
     },
     {
       "type": "logs",
-      "title": "Business events",
+      "title": "Errors (API + frontend)",
+      "description": "Expand a line for all fields, including the stack trace (err_stack). Full details per error are in Sentry.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -843,14 +995,16 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=\"app\"} | json | event != \"\""
+          "expr": "{service=\"app\", level=~\"error|fatal\"} | json | line_format `{{ .msg }}{{ if or .url .req_url }}  ·  {{ or .method .req_method }} {{ or .url .req_url }}{{ end }}`"
         }
       ],
       "options": {
         "showTime": true,
         "wrapLogMessage": true,
+        "prettifyLogMessage": false,
         "sortOrder": "Descending",
-        "enableLogDetails": true
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
       },
       "id": 19,
       "gridPos": {
@@ -861,8 +1015,9 @@
       }
     },
     {
-      "type": "logs",
-      "title": "All API logs",
+      "type": "table",
+      "title": "Business events",
+      "description": "",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -874,19 +1029,127 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=\"app\"}"
+          "expr": "{service=\"app\"} | json | event != \"\"",
+          "queryType": "range",
+          "maxLines": 500
         }
       ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "json",
+            "replace": false,
+            "keepTime": false
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "Time": true,
+              "event": true,
+              "visitId": true,
+              "hits": true,
+              "key": true,
+              "bytes": true,
+              "mimetype": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "event": 1,
+              "visitId": 2,
+              "hits": 3,
+              "key": 4,
+              "bytes": 5,
+              "mimetype": 6
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
+      },
       "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending",
-        "enableLogDetails": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Time",
+            "desc": true
+          }
+        ]
       },
       "id": 20,
       "gridPos": {
         "x": 0,
         "y": 50,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "type": "logs",
+      "title": "All API logs",
+      "description": "Compact view; expand a line for the raw JSON fields.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service=\"app\"} | json | line_format `{{ if eq .msg \"request\" }}{{ .method }} {{ .url }} → {{ .status }} · {{ .ms }} ms{{ else if .msg }}{{ .msg }}{{ else }}{{ __line__ }}{{ end }}`"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      },
+      "id": 21,
+      "gridPos": {
+        "x": 0,
+        "y": 58,
         "w": 24,
         "h": 10
       }
