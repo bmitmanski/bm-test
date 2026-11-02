@@ -23,6 +23,15 @@ done
 docker compose pull --quiet
 docker compose up -d --remove-orphans
 
+# `up -d` only recreates containers whose compose definition changed, not the files they mount
+# (and rsync replaces files, so single-file bind mounts keep the old inode). Recreate config-driven
+# services whenever their config files change.
+CONFIG_HASH=$(find caddy alloy loki grafana -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+if [ "$CONFIG_HASH" != "$(cat .config-hash 2>/dev/null)" ]; then
+  echo "Config files changed, recreating caddy, alloy, loki, grafana"
+  docker compose up -d --force-recreate caddy alloy loki grafana
+fi
+
 healthy() {
   local status
   for _ in $(seq 1 30); do
@@ -44,5 +53,6 @@ if ! healthy app || ! healthy web; then
   exit 1
 fi
 
+echo "$CONFIG_HASH" > .config-hash
 docker image prune -f >/dev/null
 echo "Deployed ${NEW[APP_IMAGE]} and ${NEW[WEB_IMAGE]}"
