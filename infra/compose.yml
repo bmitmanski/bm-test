@@ -17,7 +17,7 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on: [app, grafana]
+    depends_on: [app, web, grafana]
     logging: *logging
 
   app:
@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      DEBUG_ROUTES: ${DEBUG_ROUTES:-false}
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       S3_ENDPOINT: http://s3:8333
@@ -35,6 +36,11 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       s3: { condition: service_started }
+    logging: *logging
+
+  web:
+    image: ${WEB_IMAGE:-bm-test-web:local}
+    restart: unless-stopped
     logging: *logging
 
   postgres:
@@ -81,7 +87,7 @@ services:
     volumes: [s3_data:/data]
     logging: *logging
 
-  # --- observability: Alloy tails every container's stdout -> Loki -> Grafana ---
+  # --- observability: Alloy collects logs (-> Loki) and metrics (-> Prometheus), Grafana shows both ---
   loki:
     image: grafana/loki:3.7
     restart: unless-stopped
@@ -89,6 +95,17 @@ services:
     volumes:
       - ./loki/config.yml:/etc/loki/config.yml:ro
       - loki_data:/loki
+    logging: *logging
+
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-remote-write-receiver # Alloy pushes metrics here
+    volumes: [prometheus_data:/prometheus]
     logging: *logging
 
   alloy:
@@ -99,7 +116,11 @@ services:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy_data:/var/lib/alloy
-    depends_on: [loki]
+      # Host metrics (CPU, RAM, disk) for prometheus.exporter.unix
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    depends_on: [loki, prometheus]
     logging: *logging
 
   grafana:
@@ -109,10 +130,18 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?}
       GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Alert notifications. Without SMTP alerts still fire, but only show up in the Grafana UI.
+      ALERT_EMAIL: ${ALERT_EMAIL:-${ACME_EMAIL}}
+      GF_SMTP_ENABLED: ${SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${SMTP_HOST:-}
+      GF_SMTP_USER: ${SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${SMTP_FROM:-${SMTP_USER:-admin@grafana.localhost}} # Gmail requires From = SMTP_USER
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
-    depends_on: [loki]
+    depends_on: [loki, prometheus]
     logging: *logging
 
 volumes:
@@ -122,5 +151,6 @@ volumes:
   redis_data:
   s3_data:
   loki_data:
+  prometheus_data:
   alloy_data:
   grafana_data:

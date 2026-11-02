@@ -31,3 +31,27 @@ test("POST /visits increments counter", async () => {
   const res = await app.inject({ method: "POST", url: "/visits" });
   assert.equal(res.json().hits, 2);
 });
+
+test("debug routes are off by default", async () => {
+  const res = await buildApp(fakeDeps()).inject({ method: "GET", url: "/debug/error" });
+  assert.equal(res.statusCode, 404);
+});
+
+test("debug error is counted as 5xx in metrics", async () => {
+  const app = buildApp(fakeDeps(), { debugRoutes: true });
+  const res = await app.inject({ method: "GET", url: "/debug/error" });
+  assert.equal(res.statusCode, 500);
+  const metrics = (await app.inject({ method: "GET", url: "/metrics" })).body;
+  assert.match(metrics, /http_requests_total\{method="GET",route="\/debug\/error",status_code="500"\} 1/);
+  assert.match(metrics, /http_errors_total\{class="5xx"\} 1/);
+});
+
+test("business events and frontend errors are counted", async () => {
+  const app = buildApp(fakeDeps());
+  await app.inject({ method: "POST", url: "/visits" });
+  const res = await app.inject({ method: "POST", url: "/client-errors", payload: { message: "boom" } });
+  assert.equal(res.statusCode, 204);
+  const metrics = (await app.inject({ method: "GET", url: "/metrics" })).body;
+  assert.match(metrics, /app_events_total\{event="visit.recorded"\} 1/);
+  assert.match(metrics, /frontend_errors_total 1/);
+});

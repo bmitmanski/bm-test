@@ -1,0 +1,20 @@
+apiVersion: 1
+
+# The first deploy provisioned Loki without a fixed uid; recreate it so uid=loki sticks.
+deleteDatasources:
+  - name: Loki
+    orgId: 1
+
+datasources:
+  # Fixed uids so dashboards and alert rules can reference them.
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

@@ -5,7 +5,20 @@
 # Caddy fetches and renews Let's Encrypt certs automatically once DNS points here.
 {$DOMAIN} {
 	encode zstd gzip
-	reverse_proxy app:3000
+
+	# Prometheus metrics are for the internal network only.
+	handle /api/metrics {
+		respond 404
+	}
+
+	# Same origin for FE and API: no CORS, one certificate.
+	handle_path /api/* {
+		reverse_proxy app:3000
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
 }
 
 grafana.{$DOMAIN} {

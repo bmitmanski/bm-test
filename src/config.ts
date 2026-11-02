@@ -8,6 +8,7 @@ export function loadConfig() {
   return {
     port: Number(process.env.PORT ?? 3000),
     logLevel: process.env.LOG_LEVEL ?? "info",
+    debugRoutes: process.env.DEBUG_ROUTES === "true",
     databaseUrl: required("DATABASE_URL"),
     redisUrl: required("REDIS_URL"),
     s3: {

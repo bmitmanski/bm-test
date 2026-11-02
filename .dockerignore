@@ -6,3 +6,4 @@ dist
 infra
 *.md
 .env*
+web

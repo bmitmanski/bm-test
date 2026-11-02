@@ -3,6 +3,8 @@
 services:
   app:
     build: { context: .., args: { APP_VERSION: local } }
+  web:
+    build: { context: ../web, args: { APP_VERSION: local } }
   postgres:
     ports: ["5432:5432"]
   redis:

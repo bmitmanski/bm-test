@@ -1,116 +1,121 @@
-# Setup na GCP (Compute Engine) — krok po kroku
+# GCP setup (Compute Engine), step by step
 
-Docelowo: jedna maszyna e2-medium (Ubuntu x86/64) w `europe-central2`, na niej cały stack z `infra/compose.yml`, deploy z GitHub Actions.
+Target: one e2-medium VM (Ubuntu x86/64) in `europe-central2` running the whole stack from `infra/compose.yml`, deployed from GitHub Actions.
 
-> ⚠️ Używaj **prywatnego** konta Google z Free Trial (300 $ / 90 dni), nie firmowego projektu ani konta `@selleo.com`.
+> ⚠️ Use a **private** Google account with the Free Trial (300 $ / 90 days), not a company project or a `@selleo.com` account.
 
-Komendy uruchamiasz lokalnie (WSL), w katalogu repo. Zmienne trzymasz w `.env.setup` (jest w `.gitignore`):
+Run the commands locally (WSL), from the repo root. Keep the variables in `.env.setup` (it is in `.gitignore`):
 
 ```bash
 # .env.setup
-PROJECT=          # PROJECT_ID z `gcloud projects list` (to nie to samo co nazwa projektu!)
+PROJECT=          # PROJECT_ID from `gcloud projects list` (not the project name!)
 VM=bm-test-instance-1
 ZONE=europe-central2-a
-IP=<statyczny zewnętrzny IP>
-DOMAIN=<subdomena>.duckdns.org
-ACME_EMAIL=          # twój e-mail (powiadomienia Let's Encrypt)
+IP=<static external IP>
+DOMAIN=<subdomain>.duckdns.org
+ACME_EMAIL=          # your e-mail (Let's Encrypt account)
 ```
 
-W każdym nowym terminalu wczytaj je:
+Load them in every new terminal:
 
 ```bash
 set -a; source .env.setup; set +a
 ```
 
-## 1. Konto i projekt
+## 1. Account and project
 
-- Aktywuj Free Trial na prywatnym koncie Google (wymaga karty), utwórz nowy projekt.
-- Billing → Budgets & alerts → budżet np. 50 $ z alertem e-mail (żeby widzieć, ile kredytu schodzi).
+- Activate the Free Trial on a private Google account (a card is required) and create a new project.
+- Billing → Budgets & alerts → a budget of e.g. 50 $ with an e-mail alert, so you see how fast the credit goes.
 
-## 2. Statyczny adres IP
+## 2. Static IP address
 
 VPC network → IP addresses → **Reserve external static IP address**, region `europe-central2`.
 
-Po utworzeniu maszyny (krok 3) **przypnij go do niej**: VM instances → maszyna → Edit → Network interfaces → `nic0` → External IPv4 address → wybierz zarezerwowany adres → Save.
-W tabeli IP addresses kolumna *In use by* musi pokazywać maszynę, a nie `None` (nieprzypięty statyczny IP jest płatny, a tymczasowy *Ephemeral* może się zmienić).
-Ten adres wpisujesz wszędzie (DNS, `.env.setup`, sekrety). Adres wewnętrzny `10.x.x.x` nie jest nigdzie potrzebny.
+After creating the VM (step 3), **attach the IP to it**: VM instances → your VM → Edit → Network interfaces → `nic0` → External IPv4 address → pick the reserved address → Save.
+In the IP addresses table, the *In use by* column must show the VM, not `None`. An unattached static IP is billed, and an *Ephemeral* one can change.
+Use this address everywhere (DNS, `.env.setup`, secrets). The internal `10.x.x.x` address is not needed anywhere.
 
-## 3. Maszyna wirtualna
+## 3. Virtual machine
 
 Compute Engine → Create instance:
 
 - Machine type: **e2-medium** (2 vCPU, 4 GB RAM)
-- Boot disk: **Ubuntu 26.04 LTS x86/64** (`amd64`, **nie** Arm64), 50 GB, Balanced persistent disk
-  - jeśli instalator Dockera nie wspiera 26.04 → odtwórz na **24.04 LTS x86/64**
-- Networking: przypisz zarezerwowany statyczny IP
-- Firewall: zaznacz **Allow HTTP traffic** i **Allow HTTPS traffic** (opcjonalnie dodaj regułę UDP 443 dla HTTP/3)
+- Boot disk: **Ubuntu 26.04 LTS x86/64** (`amd64`, **not** Arm64), 50 GB, Balanced persistent disk
+  - if the Docker installer does not support 26.04, recreate the VM with **24.04 LTS x86/64**
+- Networking: attach the reserved static IP
+- Firewall: tick **Allow HTTP traffic** and **Allow HTTPS traffic** (optionally add a UDP 443 rule for HTTP/3)
 
-## 4. Serwer
+## 4. Server
 
-**4.1. gcloud CLI** (jeśli nie masz) — zaloguj się prywatnym kontem i wybierz projekt z triala:
+**4.1. gcloud CLI** (if you don't have it). Log in with the private account and pick the trial project:
 
 ```bash
 curl -sSL https://sdk.cloud.google.com | bash && exec -l $SHELL
 gcloud init
 ```
 
-Upewnij się, że gcloud wskazuje Twój projekt. ID projektu jest globalnie unikalne i często różni się od nazwy (np. `bm-test-123456`). Przy złym ID dostaniesz `PERMISSION_DENIED ... compute.googleapis.com`:
+Make sure gcloud points at your project. Project IDs are globally unique and often differ from the name (e.g. `bm-test-123456`). With the wrong ID you get `PERMISSION_DENIED ... compute.googleapis.com`:
 
 ```bash
-gcloud projects list                  # kolumna PROJECT_ID
+gcloud projects list                  # PROJECT_ID column
 gcloud config set project $PROJECT
-gcloud compute instances list         # musi pokazać Twoją maszynę
+gcloud compute instances list         # must show your VM
 ```
 
-**4.2. Klucz deployowy dla GitHub Actions:**
+**4.2. Deploy key for GitHub Actions:**
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/bm-test-deploy -N "" -C github-actions-deploy
 ```
 
-**4.3. Bootstrap** (Docker, użytkownik `deploy`, ufw, fail2ban, SSH tylko na klucze, automatyczne aktualizacje):
+**4.3. Bootstrap** (Docker, `deploy` user, ufw, fail2ban, key-only SSH, automatic security updates):
 
 ```bash
 gcloud compute scp infra/scripts/bootstrap-vps.sh ~/.ssh/bm-test-deploy.pub $VM:~ --zone=$ZONE
 gcloud compute ssh $VM --zone=$ZONE -- 'sudo bash ~/bootstrap-vps.sh "$(cat ~/bm-test-deploy.pub)"'
 ```
 
-**4.4. Sprawdzenie** — logowanie jako `deploy`, tak jak zrobi to GitHub:
+**4.4. Check**: log in as `deploy`, the same way GitHub will:
 
 ```bash
 ssh -i ~/.ssh/bm-test-deploy deploy@$IP 'docker compose version'
 ```
 
-## 5. Domena (przed `.env`)
+## 5. Domain (before `.env`)
 
-### Wariant A: DuckDNS (za darmo)
+### Option A: DuckDNS (free)
 
-1. https://www.duckdns.org → zaloguj się (GitHub/Google).
-2. *sub domain* → np. `bm-test` → **add domain**.
-3. *current ip* → statyczny IP → **update ip**.
+1. https://www.duckdns.org → log in (GitHub/Google).
+2. *sub domain* → e.g. `bm-test` → **add domain**.
+3. *current ip* → the static IP → **update ip**.
 
-Poddomeny (`grafana.bm-test.duckdns.org`, `api.…`) działają automatycznie (wildcard). Skrypt aktualizujący IP z instrukcji DuckDNS nie jest potrzebny, bo IP jest statyczne. DuckDNS nie obsługuje rekordu CAA — pomiń go.
+Or with one request (pass `ip` explicitly, otherwise DuckDNS uses the IP of the machine sending the request):
 
-### Wariant B: własna domena
+```bash
+curl "https://www.duckdns.org/update?domains=bm-test&token=<YOUR_TOKEN>&ip=$IP&verbose=true"
+```
 
-U rejestratora lub w Cloudflare (tryb **DNS only**, szara chmurka):
+Subdomains (`grafana.bm-test.duckdns.org`) work automatically (wildcard). You don't need DuckDNS's IP-update cron because the IP is static. DuckDNS does not support CAA records; skip that.
 
-| Typ | Nazwa | Wartość |
+### Option B: your own domain
+
+At the registrar or in Cloudflare (**DNS only** mode, grey cloud):
+
+| Type | Name | Value |
 |---|---|---|
 | A | `@` | `<IP>` |
 | A | `grafana` | `<IP>` |
-| A | `api` | `<IP>` (pod przyszły podział frontend/API) |
 | CAA | `@` | `0 issue "letsencrypt.org"` |
 
-Sprawdź — obie komendy muszą zwrócić Twoje IP, inaczej Caddy nie dostanie certyfikatu:
+Check: both commands must return your IP, otherwise Caddy can't get a certificate:
 
 ```bash
 dig +short $DOMAIN; dig +short grafana.$DOMAIN
 ```
 
-## 6. Sekrety na serwerze
+## 6. Secrets on the server
 
-Hasła generują się lokalnie i trafiają tylko na serwer:
+Passwords are generated locally and only ever land on the server:
 
 ```bash
 ssh -i ~/.ssh/bm-test-deploy deploy@$IP "cat > /opt/app/.env" <<EOF
@@ -125,15 +130,36 @@ S3_ACCESS_KEY=$(openssl rand -hex 12)
 S3_SECRET_KEY=$(openssl rand -hex 24)
 GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)
 LOG_LEVEL=info
+DEBUG_ROUTES=true
+ALERT_EMAIL=$ACME_EMAIL
+# SMTP for alert e-mails, see docs/OBSERVABILITY.md (optional, alerts work in the UI without it)
+SMTP_ENABLED=false
 EOF
 ssh -i ~/.ssh/bm-test-deploy deploy@$IP 'chmod 600 /opt/app/.env && grep GRAFANA /opt/app/.env'
 ```
 
-Zapisz hasło do Grafany.
+Save the Grafana password. Run this **once**: Grafana only applies `GRAFANA_ADMIN_PASSWORD` on its very first start. If you change it later, reset it in Grafana:
+
+```bash
+ssh -i ~/.ssh/bm-test-deploy deploy@$IP 'cd /opt/app && set -a && . ./.env && set +a \
+  && docker compose exec -T grafana grafana cli admin reset-admin-password "$GRAFANA_ADMIN_PASSWORD"'
+```
+
+**Changing variables later** (run locally; it backs up the old file to `/opt/app/.env.bak`):
+
+```bash
+infra/scripts/server-env.sh DEBUG_ROUTES=true ALERT_EMAIL=you@gmail.com           # only edit .env
+infra/scripts/server-env.sh --apply SMTP_ENABLED=true SMTP_PASSWORD=xxxx          # edit + recreate changed containers
+infra/scripts/server-env.sh --list                                                # variable names, values hidden
+```
+
+Without `--apply`, the change takes effect on the next deploy (it runs `docker compose up -d`).
 
 ## 7. GitHub
 
-> Kolejność: **najpierw sekrety, potem push na `main`** — inaczej pierwszy deploy się wysypie.
+> Order matters: **secrets first, then push to `main`**. Otherwise the first deploy fails.
+
+`gh` must be recent (≥ 2.31 for `gh variable`). The Ubuntu package is too old; install from https://cli.github.com, then `gh auth login`.
 
 **7.1. Repo:**
 
@@ -141,7 +167,7 @@ Zapisz hasło do Grafany.
 gh repo create bm-test --private --source=. --remote=origin
 ```
 
-**7.2. Environment `production` i sekrety:**
+**7.2. `production` environment and secrets:**
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
@@ -153,9 +179,9 @@ gh secret set VPS_KNOWN_HOSTS --env production --body "$(ssh-keyscan -t ed25519 
 gh variable set DOMAIN        --env production --body "$DOMAIN"
 ```
 
-Opcjonalnie: Settings → Environments → production → *Required reviewers* (ręczna akceptacja deployu) oraz Settings → Branches → ochrona `main` z wymaganym checkiem CI.
+Optional: Settings → Environments → production → *Required reviewers* (manual approval of deploys), and Settings → Branches → protect `main` with the CI check required.
 
-**7.3. Pierwszy commit i push** (deploy odpala się z `main`):
+**7.3. First commit and push** (deploys run from `main`):
 
 ```bash
 git branch -M main
@@ -164,45 +190,54 @@ git push -u origin main
 gh run watch
 ```
 
-## 8. Weryfikacja
+## 8. Verify
 
 ```bash
-curl https://$DOMAIN/ready     # {"db":"ok","redis":"ok","storage":"ok"}
+curl https://$DOMAIN/api/ready     # {"db":"ok","redis":"ok","storage":"ok"}
 ```
 
-- Grafana: `https://grafana.$DOMAIN` (login `admin`) → Explore → Loki → `{service="app"}`
-- Brak certyfikatu? Sprawdź logi Caddy (najczęściej: DNS jeszcze nie wskazuje na serwer albo brak reguły firewalla na port 80):
+- Frontend: `https://$DOMAIN`
+- Grafana: `https://grafana.$DOMAIN` (user `admin`) → Dashboards → bm-test → **bm-test · app**. More in [OBSERVABILITY.md](OBSERVABILITY.md)
+- No certificate? Check Caddy's logs. Usually DNS doesn't point at the server yet, or there is no firewall rule for port 80:
 
   ```bash
   ssh -i ~/.ssh/bm-test-deploy deploy@$IP 'cd /opt/app && docker compose logs caddy --tail 30'
   ```
 
-**Backup do crona:**
+**Backup cron job** (daily at 03:00 server time, UTC):
 
 ```bash
 ssh -i ~/.ssh/bm-test-deploy deploy@$IP '(crontab -l 2>/dev/null; echo "0 3 * * * /opt/app/scripts/backup.sh >> /opt/backups/backup.log 2>&1") | crontab -'
 ```
 
-## 9. Monitoring dostępności
+`backup.sh` dumps Postgres to `/opt/backups/pg-YYYY-MM-DD.sql.gz` and keeps 7 days. That is on the same disk, so also set up **disk snapshots**: Compute Engine → Snapshots → *Create snapshot schedule* (daily, keep 7 days) and attach it to the VM's disk. Snapshots cover everything (S3 files, Redis, Grafana) and live outside the VM.
+
+Restore a dump:
+
+```bash
+cd /opt/app && gunzip -c /opt/backups/pg-2026-11-02.sql.gz | docker compose exec -T postgres psql -U app app
+```
+
+## 9. Uptime monitoring
 
 GCP → Monitoring → Uptime checks → Create:
 
-- HTTPS, host `$DOMAIN`, ścieżka `/ready`, co 1 min
-- w kreatorze utwórz alert z powiadomieniem na e-mail
+- HTTPS, host `$DOMAIN`, path **`/api/ready`** (not `/ready`, which now returns the frontend page with a 200), every 1 min
+- create an alert with an e-mail notification in the same wizard
 
-Test: `docker compose stop app` na serwerze → czy przyszedł mail? Potem `docker compose start app`.
+Test: `docker compose stop app` on the server → did the e-mail arrive? Then `docker compose start app`.
 
 ## Rollback
 
-Actions → **Deploy** → *Run workflow* → `image_tag` = SHA starszego commita (bez przebudowy obrazu).
-`deploy.sh` sam wraca do poprzedniego obrazu, jeśli nowy nie przejdzie healthchecka.
+Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older commit (no image rebuild).
+`deploy.sh` rolls back to the previous images on its own if the new ones fail the healthcheck.
 
-## Dalej (TODO)
+## Next (TODO)
 
-- [ ] Frontend (SPA) za Caddy, podział `domena` / `api.domena`
-- [ ] Sentry (API + frontend, release = SHA, source mapy z CI)
-- [ ] Alerty z logów w Grafanie (wzrost błędów) → e-mail/Slack
-- [ ] Ochrona Grafany (basic auth / allowlista IP)
-- [ ] Deploy przez Workload Identity Federation + IAP (zamknięty port 22, bez kluczy SSH w sekretach)
-- [ ] Migracje DB w pipeline, testy integracyjne w CI
-- [ ] Backup poza serwer + przetestowany restore
+- [x] Frontend (SPA) behind Caddy, API under `/api` (same domain, no CORS)
+- [x] Metrics (Prometheus) + dashboard + alerts in Grafana, see [OBSERVABILITY.md](OBSERVABILITY.md)
+- [ ] Sentry (API + frontend, release = SHA, source maps from CI)
+- [ ] Protect Grafana (basic auth / IP allowlist)
+- [ ] Deploy via Workload Identity Federation + IAP (port 22 closed, no SSH key in secrets)
+- [ ] DB migrations in the pipeline, integration tests in CI
+- [ ] Off-site backups + a tested restore

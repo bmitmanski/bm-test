@@ -1,3 +1,5 @@
+// ---------------- logs -> Loki ----------------
+
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
   refresh_interval = "5s"
@@ -40,5 +42,33 @@ loki.process "json" {
 loki.write "local" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// ---------------- metrics -> Prometheus ----------------
+
+// App metrics from /metrics (prom-client): HTTP rate/latency/status, business events, Node runtime.
+prometheus.scrape "app" {
+  targets         = [{"__address__" = "app:3000", "job" = "app"}]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.local.receiver]
+}
+
+// Host metrics (CPU, memory, disk, network) — what node-exporter would give you.
+prometheus.exporter.unix "host" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/host/root"
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
   }
 }

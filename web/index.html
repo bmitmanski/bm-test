@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bm-test · observability playground</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>bm-test</h1>
+          <p class="muted">Click around, then check the effect in Grafana.</p>
+        </div>
+        <a id="grafana-link" class="button secondary" target="_blank" rel="noopener">Open Grafana ↗</a>
+      </header>
+
+      <section class="card">
+        <h2>Status</h2>
+        <dl class="status">
+          <div><dt>API</dt><dd id="st-api">…</dd></div>
+          <div><dt>Postgres</dt><dd id="st-db">…</dd></div>
+          <div><dt>Redis</dt><dd id="st-redis">…</dd></div>
+          <div><dt>Storage</dt><dd id="st-storage">…</dd></div>
+          <div><dt>API version</dt><dd id="st-version" class="mono">…</dd></div>
+          <div><dt>Web version</dt><dd id="st-fe-version" class="mono">…</dd></div>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>Normal events <span class="muted">(business traffic)</span></h2>
+        <div class="actions">
+          <button data-action="visit">Record a visit</button>
+          <label class="button secondary">
+            Upload a file
+            <input id="file-input" type="file" hidden />
+          </label>
+          <button data-action="burst" class="secondary">20 visits at once</button>
+        </div>
+        <p class="hint">Metrics: <code>app_events_total{event="visit.recorded"}</code>, <code>file.uploaded</code>, <code>file.downloaded</code>.</p>
+      </section>
+
+      <section class="card" id="debug-section">
+        <h2>Test failures</h2>
+        <p id="debug-disabled" class="warning" hidden>
+          Test endpoints are disabled. Set <code>DEBUG_ROUTES=true</code> in <code>/opt/app/.env</code> and restart the app.
+        </p>
+        <div class="grid">
+          <button data-action="server-error" class="danger">Server error (500)</button>
+          <p>Unhandled exception. A <code>level=error</code> log with a stack trace, a 5xx in metrics, and an <b>alert</b>.</p>
+
+          <button data-action="db-error" class="danger">Database error (500)</button>
+          <p>Queries a table that doesn't exist: a failing dependency.</p>
+
+          <button data-action="validation" class="warn">Validation error (400)</button>
+          <p>A client mistake. Counted as 4xx in metrics, but it should <b>not</b> wake anyone up at night.</p>
+
+          <button data-action="slow" class="warn">Slow request (2.5 s)</button>
+          <p>Pushes up the p95 latency in the histogram.</p>
+
+          <button data-action="fe-error" class="danger">Browser JS error</button>
+          <p>An exception caught by <code>window.onerror</code> and sent to <code>/api/client-errors</code>.</p>
+
+          <button data-action="fe-rejection" class="danger">Unhandled promise rejection</button>
+          <p>An unhandled error in async code (<code>unhandledrejection</code>).</p>
+
+          <button data-action="crash" class="danger">Crash the API process</button>
+          <p>The process exits and Docker restarts it. Fires the <i>API restarted</i> alert; the restart shows up in the logs.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>History</h2>
+        <ol id="log" class="log"></ol>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

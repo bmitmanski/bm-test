@@ -1,5 +1,6 @@
 import { buildApp } from "./app";
 import { loadConfig } from "./config";
+import { createMetrics } from "./metrics";
 import { createServices } from "./services";
 
 async function main() {
@@ -7,7 +8,9 @@ async function main() {
   const services = await createServices(config);
   // JSON logs to stdout -> Docker -> Alloy -> Loki -> Grafana.
   const app = buildApp(services.deps, {
-    logger: { level: config.logLevel, formatters: { level: (label) => ({ level: label }) } },
+    fastify: { logger: { level: config.logLevel, formatters: { level: (label) => ({ level: label }) } } },
+    metrics: createMetrics(),
+    debugRoutes: config.debugRoutes,
   });
 
   const shutdown = async (signal: string) => {
