@@ -2,6 +2,14 @@
 
 A small app (Fastify API + Vite frontend, TypeScript) with all the infrastructure around it: domain → VM → GitHub Actions (checks + deploy) → Postgres, Redis, S3 storage → logs, metrics and alerts in Grafana, errors in Sentry.
 
+| Environment | URL | |
+|---|---|---|
+| **Production** | https://bm-test.duckdns.org | deployed after e2e on staging + manual approval; test-failure buttons off |
+| **Staging** | https://staging.bm-test.duckdns.org | every push to `main`; test-failure buttons on |
+| Grafana | https://grafana.bm-test.duckdns.org | both environments (Environment dropdown on the dashboard); basic auth + Grafana login |
+
+Health: `/api/health` (version = commit SHA), `/api/ready` (DB, Redis, S3).
+
 ```
                  GitHub (push to main)
                         │

@@ -72,8 +72,13 @@ loki.write "local" {
 // ---------------- metrics -> Prometheus ----------------
 
 // App metrics from /metrics (prom-client): HTTP rate/latency/status, business events, Node runtime.
+// Both environments, told apart by the env label (dashboard dropdown; alerts use env="production").
+// staging-app is reached over the shared "edge" network.
 prometheus.scrape "app" {
-  targets         = [{"__address__" = "app:3000", "job" = "app"}]
+  targets = [
+    {"__address__" = "app:3000", "job" = "app", "env" = "production"},
+    {"__address__" = "staging-app:3000", "job" = "app", "env" = "staging"},
+  ]
   scrape_interval = "15s"
   forward_to      = [prometheus.remote_write.local.receiver]
 }

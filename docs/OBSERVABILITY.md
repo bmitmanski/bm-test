@@ -68,6 +68,7 @@ Loki (LogQL):
 {service="postgres"} |= "ERROR"                        # database errors
 {service="caddy"}                                      # reverse proxy logs (certificates!)
 {env="staging"}                                        # everything from staging
+sum by (env) (rate(http_requests_total[5m]))           # traffic per environment (PromQL)
 {service="staging-app", level="error"}                 # staging API errors
 sum by (level) (count_over_time({service="app"}[5m]))  # log volume by level
 ```
@@ -173,7 +174,7 @@ You can use Slack, Discord or Telegram instead of e-mail (Alerting → Contact p
 
 The **Test failures** buttons only work with `DEBUG_ROUTES=true`: use them on **staging** (`https://staging.<domain>`, on by default). Production runs with `false` (anyone could crash the API).
 
-Staging logs are in the same Loki with `env="staging"` and services prefixed `staging-` (`staging-app`, `staging-postgres`…), so the dashboard and alerts (which query `service="app"`) only cover production; look at staging in Explore or Drilldown. Staging metrics are not scraped. In Sentry, filter by environment `staging`.
+**Environments in Grafana**: the dashboard has an **Environment** dropdown (production / staging) at the top; every panel follows it except *Server CPU / RAM / disk*, which is the shared VM. Metrics carry an `env` label; in Loki staging services are prefixed `staging-` (`staging-app`, `staging-postgres`…) and also have `env="staging"`. **Alerts only watch production** (`env="production"` in every rule), so the test buttons on staging show up on the dashboard without paging anyone. In Sentry, filter by environment `staging`.
 
 | Button | Logs (Loki) | Metrics | Alert (after ~1–2 min) |
 |---|---|---|---|

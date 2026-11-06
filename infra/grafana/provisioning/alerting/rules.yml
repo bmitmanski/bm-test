@@ -18,7 +18,7 @@ groups:
       datasourceUid: prometheus
       model:
         refId: A
-        expr: 'up{job="app"}'
+        expr: 'up{env="production", job="app"}'
         instant: true
     - refId: C
       datasourceUid: __expr__
@@ -50,7 +50,7 @@ groups:
       datasourceUid: prometheus
       model:
         refId: A
-        expr: 'sum(increase(http_errors_total{class="5xx"}[5m]))'
+        expr: 'sum(increase(http_errors_total{env="production", class="5xx"}[5m]))'
         instant: true
     - refId: C
       datasourceUid: __expr__
@@ -82,7 +82,7 @@ groups:
       datasourceUid: prometheus
       model:
         refId: A
-        expr: 'sum(increase(frontend_errors_total[5m]))'
+        expr: 'sum(increase(frontend_errors_total{env="production"}[5m]))'
         instant: true
     - refId: C
       datasourceUid: __expr__
@@ -114,7 +114,7 @@ groups:
       datasourceUid: prometheus
       model:
         refId: A
-        expr: 'changes(process_start_time_seconds{job="app"}[10m])'
+        expr: 'changes(process_start_time_seconds{env="production", job="app"}[10m])'
         instant: true
     - refId: C
       datasourceUid: __expr__
@@ -146,7 +146,7 @@ groups:
       datasourceUid: prometheus
       model:
         refId: A
-        expr: 'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))'
+        expr: 'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{env="production"}[5m])))'
         instant: true
     - refId: C
       datasourceUid: __expr__

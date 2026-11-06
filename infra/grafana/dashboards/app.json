@@ -41,7 +41,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{job=\"app\"}",
+          "expr": "up{env=\"$env\", job=\"app\"}",
           "instant": true
         }
       ],
@@ -107,7 +107,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_requests_total[5m]))",
+          "expr": "sum(rate(http_requests_total{env=\"$env\"}[5m]))",
           "instant": true
         }
       ],
@@ -159,7 +159,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(http_errors_total{class=\"5xx\"}[5m]))",
+          "expr": "sum(increase(http_errors_total{env=\"$env\", class=\"5xx\"}[5m]))",
           "instant": true
         }
       ],
@@ -215,7 +215,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{env=\"$env\"}[5m])))",
           "instant": true
         }
       ],
@@ -274,7 +274,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(frontend_errors_total[1h]))",
+          "expr": "sum(increase(frontend_errors_total{env=\"$env\"}[1h]))",
           "instant": true
         }
       ],
@@ -330,7 +330,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "changes(process_start_time_seconds{job=\"app\"}[1h])",
+          "expr": "changes(process_start_time_seconds{env=\"$env\", job=\"app\"}[1h])",
           "instant": true
         }
       ],
@@ -399,7 +399,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (status_code) (rate(http_requests_total[1m]))",
+          "expr": "sum by (status_code) (rate(http_requests_total{env=\"$env\"}[1m]))",
           "legendFormat": "{{status_code}}"
         }
       ],
@@ -449,7 +449,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{env=\"$env\"}[5m])))",
           "legendFormat": "{{route}}"
         }
       ],
@@ -499,7 +499,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (class) (rate(http_errors_total[1m])) * 60",
+          "expr": "sum by (class) (rate(http_errors_total{env=\"$env\"}[1m])) * 60",
           "legendFormat": "{{class}}"
         },
         {
@@ -508,7 +508,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(frontend_errors_total[1m])) * 60",
+          "expr": "sum(rate(frontend_errors_total{env=\"$env\"}[1m])) * 60",
           "legendFormat": "frontend"
         }
       ],
@@ -558,7 +558,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (event) (rate(app_events_total[1m])) * 60",
+          "expr": "sum by (event) (rate(app_events_total{env=\"$env\"}[1m])) * 60",
           "legendFormat": "{{event}}"
         }
       ],
@@ -691,7 +691,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "process_resident_memory_bytes{job=\"app\"}",
+          "expr": "process_resident_memory_bytes{env=\"$env\", job=\"app\"}",
           "legendFormat": "RSS"
         },
         {
@@ -700,7 +700,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "nodejs_heap_size_used_bytes{job=\"app\"}",
+          "expr": "nodejs_heap_size_used_bytes{env=\"$env\", job=\"app\"}",
           "legendFormat": "heap used"
         }
       ],
@@ -750,7 +750,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "nodejs_eventloop_lag_p99_seconds{job=\"app\"}",
+          "expr": "nodejs_eventloop_lag_p99_seconds{env=\"$env\", job=\"app\"}",
           "legendFormat": "p99"
         }
       ],
@@ -813,7 +813,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=\"app\"} | json | msg=\"request\"",
+          "expr": "{env=\"$env\", service=~\"(staging-)?app\"} | json | msg=\"request\"",
           "queryType": "range",
           "maxLines": 500
         }
@@ -995,7 +995,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=\"app\", level=~\"error|fatal\"} | json | line_format `{{ .msg }}{{ if or .url .req_url }}  ·  {{ or .method .req_method }} {{ or .url .req_url }}{{ end }}`"
+          "expr": "{env=\"$env\", service=~\"(staging-)?app\", level=~\"error|fatal\"} | json | line_format `{{ .msg }}{{ if or .url .req_url }}  ·  {{ or .method .req_method }} {{ or .url .req_url }}{{ end }}`"
         }
       ],
       "options": {
@@ -1029,7 +1029,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=\"app\"} | json | event != \"\"",
+          "expr": "{env=\"$env\", service=~\"(staging-)?app\"} | json | event != \"\"",
           "queryType": "range",
           "maxLines": 500
         }
@@ -1135,7 +1135,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=\"app\"} | json | line_format `{{ if eq .msg \"request\" }}{{ .method }} {{ .url }} → {{ .status }} · {{ .ms }} ms{{ else if .msg }}{{ .msg }}{{ else }}{{ __line__ }}{{ end }}`"
+          "expr": "{env=\"$env\", service=~\"(staging-)?app\"} | json | line_format `{{ if eq .msg \"request\" }}{{ .method }} {{ .url }} → {{ .status }} · {{ .ms }} ms{{ else if .msg }}{{ .msg }}{{ else }}{{ __line__ }}{{ end }}`"
         }
       ],
       "options": {
@@ -1154,5 +1154,36 @@
         "h": 10
       }
     }
-  ]
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "env",
+        "label": "Environment",
+        "type": "custom",
+        "query": "production,staging",
+        "current": {
+          "selected": true,
+          "text": "production",
+          "value": "production"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "production",
+            "value": "production"
+          },
+          {
+            "selected": false,
+            "text": "staging",
+            "value": "staging"
+          }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "hide": 0
+      }
+    ]
+  },
+  "description": "API, frontend and server health. Environment dropdown at the top; server CPU/RAM/disk is the shared VM."
 }
