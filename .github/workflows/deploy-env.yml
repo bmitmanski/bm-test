@@ -1,0 +1,68 @@
+# Deploys already-built images to one environment. Called by deploy.yml, first for staging, then for production.
+# Each GitHub environment has its own VPS_* secrets and DOMAIN variable (its public host).
+name: Deploy environment
+
+on:
+  workflow_call:
+    inputs:
+      environment: { type: string, required: true }
+      app_image: { type: string, required: true }
+      web_image: { type: string, required: true }
+      release: { type: string, required: true }
+    outputs:
+      url:
+        value: ${{ jobs.deploy.outputs.url }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://${{ vars.DOMAIN }}
+    outputs:
+      url: https://${{ vars.DOMAIN }}
+    env:
+      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }} # secrets can't be used in `if:` directly
+      APP_IMAGE: ${{ inputs.app_image }}
+      WEB_IMAGE: ${{ inputs.web_image }}
+      SSH: ssh -i ~/.ssh/id_deploy ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          echo "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      # Server-only files (.env, .env.staging, .env.bak, .config-hash) are not in the repo and must survive --delete.
+      - name: Sync infra files
+        run: rsync -az --delete --exclude '.env*' --exclude .config-hash -e "ssh -i ~/.ssh/id_deploy" infra/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/app/
+
+      - name: Deploy
+        run: |
+          $SSH "docker login ghcr.io -u ${{ github.actor }} --password-stdin" <<< "${{ secrets.GITHUB_TOKEN }}"
+          $SSH "/opt/app/scripts/deploy.sh shared"
+          $SSH "/opt/app/scripts/deploy.sh ${{ inputs.environment }} ${APP_IMAGE,,} ${WEB_IMAGE,,}"
+
+      - name: Smoke test
+        run: |
+          for _ in $(seq 1 10); do
+            curl -fsS "https://${{ vars.DOMAIN }}/api/ready" && curl -fsS -o /dev/null "https://${{ vars.DOMAIN }}/" && exit 0
+            sleep 3
+          done
+          exit 1
+
+      # Marks the deploy in Sentry: issues show "first seen in release X", regressions are detected.
+      - name: Sentry release
+        if: ${{ vars.SENTRY_ORG != '' && env.HAS_SENTRY_TOKEN == 'true' }}
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+        with:
+          release: ${{ inputs.release }}
+          projects: ${{ vars.SENTRY_PROJECT_API }} ${{ vars.SENTRY_PROJECT_WEB }}
+          environment: ${{ inputs.environment }}
+          set_commits: skip # needs the GitHub integration in Sentry; enable it later for "suspect commits"

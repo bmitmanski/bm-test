@@ -201,6 +201,40 @@ git push -u origin main
 gh run watch
 ```
 
+**7.4. Staging** (same VM, `https://staging.$DOMAIN`; DuckDNS covers subdomains, nothing to do in DNS). The pipeline deploys to staging first, runs e2e tests against it, and only then deploys the same images to production.
+
+Env file on the server, with its own passwords (generated on the server, they never leave it):
+
+```bash
+ssh -i ~/.ssh/bm-test-deploy deploy@$IP 'bash -s' <<'REMOTE'
+cd /opt/app && [ ! -e .env.staging ] && umask 077 && cat > .env.staging <<EOF
+POSTGRES_USER=app
+POSTGRES_PASSWORD=$(openssl rand -hex 16)
+POSTGRES_DB=app
+REDIS_PASSWORD=$(openssl rand -hex 16)
+S3_BUCKET=uploads
+S3_ACCESS_KEY=$(openssl rand -hex 12)
+S3_SECRET_KEY=$(openssl rand -hex 24)
+SENTRY_DSN=<the API DSN, same as production; events are tagged environment=staging>
+LOG_LEVEL=info
+DEBUG_ROUTES=true
+EOF
+REMOTE
+```
+
+GitHub environment `staging`: the same VM, so the same secrets; `DOMAIN` is the environment's public host:
+
+```bash
+gh api -X PUT repos/$REPO/environments/staging
+gh secret set VPS_HOST        --env staging --body "$IP"
+gh secret set VPS_USER        --env staging --body "deploy"
+gh secret set VPS_SSH_KEY     --env staging < ~/.ssh/bm-test-deploy
+gh secret set VPS_KNOWN_HOSTS --env staging --body "$(ssh-keyscan -t ed25519 $IP 2>/dev/null)"
+gh variable set DOMAIN        --env staging --body "staging.$DOMAIN"
+```
+
+Change staging variables with `infra/scripts/server-env.sh --staging --apply KEY=value`.
+
 ## 8. Verify
 
 ```bash
@@ -274,7 +308,7 @@ Browser events go through `/sentry-tunnel` on your own domain, so ad blockers do
 
 ## Rollback
 
-Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older commit (no image rebuild).
+Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older commit (no image rebuild). This goes straight to production, skipping staging and e2e.
 `deploy.sh` rolls back to the previous images on its own if the new ones fail the healthcheck.
 
 ## Next (TODO)
@@ -282,7 +316,8 @@ Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older comm
 - [x] Frontend (SPA) behind Caddy, API under `/api` (same domain, no CORS)
 - [x] Metrics (Prometheus) + dashboard + alerts in Grafana, see [OBSERVABILITY.md](OBSERVABILITY.md)
 - [x] Sentry (API + frontend, release = SHA, source maps from CI), see step 10
-- [ ] Protect Grafana (basic auth / IP allowlist)
+- [x] Protect Grafana (basic auth)
+- [x] Staging on the same VM, e2e tests against it before production
 - [ ] Deploy via Workload Identity Federation + IAP (port 22 closed, no SSH key in secrets)
-- [ ] DB migrations in the pipeline, integration tests in CI
+- [ ] DB migrations in the pipeline
 - [ ] Off-site backups + a tested restore

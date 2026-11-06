@@ -1,4 +1,5 @@
-# Production stack. Lives in /opt/app on the VPS, next to its .env.
+# Production stack plus the shared edge proxy and observability. Lives in /opt/app on the VPS, next to its .env.
+# Staging runs next to it from compose.staging.yml.
 name: app
 
 x-logging: &logging
@@ -18,6 +19,7 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks: [default, edge]
     depends_on: [app, web, grafana]
     logging: *logging
 
@@ -148,6 +150,11 @@ services:
       - grafana_data:/var/lib/grafana
     depends_on: [loki, prometheus]
     logging: *logging
+
+networks:
+  # Shared with compose.staging.yml: Caddy reaches staging-app and staging-web through it.
+  edge:
+    name: edge
 
 volumes:
   caddy_data:

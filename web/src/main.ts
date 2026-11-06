@@ -1,11 +1,15 @@
 import "./style.css";
 import * as Sentry from "@sentry/browser";
 
+// The same bundle is promoted from staging to production, so the environment comes from the host name.
+const ENVIRONMENT = !import.meta.env.PROD ? "development" : location.hostname.startsWith("staging.") ? "staging" : "production";
+if (ENVIRONMENT === "staging") document.title = `[staging] ${document.title}`;
+
 // Without VITE_SENTRY_DSN (local dev) the SDK does nothing.
 // Captures uncaught errors and unhandled rejections on its own; tracing links browser and API spans.
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
-  environment: import.meta.env.PROD ? "production" : "development",
+  environment: ENVIRONMENT,
   release: import.meta.env.VITE_APP_VERSION,
   tunnel: "/sentry-tunnel", // same-origin proxy to sentry.io (web/Caddyfile), ad blockers block sentry.io directly
   integrations: [Sentry.browserTracingIntegration()],
@@ -139,6 +143,6 @@ $<HTMLInputElement>("#file-input").addEventListener("change", async (e) => {
 // --- init ---
 $("#st-fe-version").textContent = (import.meta.env.VITE_APP_VERSION ?? "dev").slice(0, 7);
 const grafana = $<HTMLAnchorElement>("#grafana-link");
-grafana.href = `${location.protocol}//grafana.${location.host}`;
+grafana.href = `${location.protocol}//grafana.${location.host.replace(/^staging\./, "")}`; // one Grafana for all environments
 refreshStatus();
 setInterval(refreshStatus, 15000);

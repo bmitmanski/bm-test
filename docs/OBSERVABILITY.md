@@ -67,6 +67,8 @@ Loki (LogQL):
 {service="app"} | json | msg="request" | status >= 500 # failed requests
 {service="postgres"} |= "ERROR"                        # database errors
 {service="caddy"}                                      # reverse proxy logs (certificates!)
+{env="staging"}                                        # everything from staging
+{service="staging-app", level="error"}                 # staging API errors
 sum by (level) (count_over_time({service="app"}[5m]))  # log volume by level
 ```
 
@@ -169,7 +171,9 @@ You can use Slack, Discord or Telegram instead of e-mail (Alerting → Contact p
 
 ## Test scenarios (buttons in the UI)
 
-The **Test failures** buttons only work with `DEBUG_ROUTES=true`. Production runs with `false` (anyone could crash the API); for a demo turn it on temporarily: `infra/scripts/server-env.sh --apply DEBUG_ROUTES=true`, and back off afterwards.
+The **Test failures** buttons only work with `DEBUG_ROUTES=true`: use them on **staging** (`https://staging.<domain>`, on by default). Production runs with `false` (anyone could crash the API).
+
+Staging logs are in the same Loki with `env="staging"` and services prefixed `staging-` (`staging-app`, `staging-postgres`…), so the dashboard and alerts (which query `service="app"`) only cover production; look at staging in Explore or Drilldown. Staging metrics are not scraped. In Sentry, filter by environment `staging`.
 
 | Button | Logs (Loki) | Metrics | Alert (after ~1–2 min) |
 |---|---|---|---|

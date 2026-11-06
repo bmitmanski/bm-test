@@ -9,8 +9,9 @@ on:
         description: "Rollback: deploy an existing image tag (commit SHA) without rebuilding"
         required: false
 
+# One VM for both environments: never two deploys at once.
 concurrency:
-  group: deploy-production
+  group: deploy
   cancel-in-progress: false
 
 permissions:
@@ -68,53 +69,39 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
-  deploy:
+  # Same images, two environments: staging first, e2e tests against it, production only if they pass.
+  staging:
     needs: build
-    if: ${{ always() && (needs.build.result == 'success' || inputs.image_tag) }}
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      environment: staging
+      app_image: ${{ needs.build.outputs.app_image }}
+      web_image: ${{ needs.build.outputs.web_image }}
+      release: ${{ github.sha }}
+    secrets: inherit
+
+  e2e:
+    needs: staging
     runs-on: ubuntu-24.04
-    environment:
-      name: production
-      url: https://${{ vars.DOMAIN }}
-    env:
-      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }} # secrets can't be used in `if:` directly
-      APP_IMAGE: ${{ needs.build.outputs.app_image || format('ghcr.io/{0}:{1}', github.repository, inputs.image_tag) }}
-      WEB_IMAGE: ${{ needs.build.outputs.web_image || format('ghcr.io/{0}-web:{1}', github.repository, inputs.image_tag) }}
-      SSH: ssh -i ~/.ssh/id_deploy ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
     steps:
       - uses: actions/checkout@v5
-
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          echo "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-
-      - name: Sync infra files
-        run: rsync -az --delete --exclude .env -e "ssh -i ~/.ssh/id_deploy" infra/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/app/
-
-      - name: Deploy
-        run: |
-          $SSH "docker login ghcr.io -u ${{ github.actor }} --password-stdin" <<< "${{ secrets.GITHUB_TOKEN }}"
-          $SSH "/opt/app/scripts/deploy.sh ${APP_IMAGE,,} ${WEB_IMAGE,,}"
-
-      - name: Smoke test
-        run: |
-          for _ in $(seq 1 10); do
-            curl -fsS "https://${{ vars.DOMAIN }}/api/ready" && curl -fsS -o /dev/null "https://${{ vars.DOMAIN }}/" && exit 0
-            sleep 3
-          done
-          exit 1
-
-      # Marks the deploy in Sentry: issues show "first seen in release X", regressions are detected.
-      - name: Sentry release
-        if: ${{ vars.SENTRY_ORG != '' && env.HAS_SENTRY_TOKEN == 'true' }}
-        uses: getsentry/action-release@v3
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - name: E2E tests against staging
+        run: npm run test:e2e
         env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-        with:
-          release: ${{ inputs.image_tag || github.sha }}
-          projects: ${{ vars.SENTRY_PROJECT_API }} ${{ vars.SENTRY_PROJECT_WEB }}
-          environment: production
-          set_commits: skip # needs the GitHub integration in Sentry; enable it later for "suspect commits"
+          BASE_URL: ${{ needs.staging.outputs.url }}
+          EXPECTED_VERSION: ${{ github.sha }}
+
+  # Also runs alone for a rollback (workflow_dispatch with image_tag): no build, no staging.
+  production:
+    needs: [build, e2e]
+    if: ${{ always() && (needs.e2e.result == 'success' || inputs.image_tag) }}
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      environment: production
+      app_image: ${{ needs.build.outputs.app_image || format('ghcr.io/{0}:{1}', github.repository, inputs.image_tag) }}
+      web_image: ${{ needs.build.outputs.web_image || format('ghcr.io/{0}-web:{1}', github.repository, inputs.image_tag) }}
+      release: ${{ inputs.image_tag || github.sha }}
+    secrets: inherit

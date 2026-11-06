@@ -2,8 +2,8 @@
 	email {$ACME_EMAIL}
 }
 
-# Caddy fetches and renews Let's Encrypt certs automatically once DNS points here.
-{$DOMAIN} {
+# Same routing for every environment: {args[0]} = API container, {args[1]} = frontend container.
+(app_routes) {
 	encode zstd gzip
 
 	# Prometheus metrics are for the internal network only.
@@ -13,12 +13,23 @@
 
 	# Same origin for FE and API: no CORS, one certificate.
 	handle_path /api/* {
-		reverse_proxy app:3000
+		reverse_proxy {args[0]}:3000
 	}
 
 	handle {
-		reverse_proxy web:80
+		reverse_proxy {args[1]}:80
 	}
+}
+
+# Caddy fetches and renews Let's Encrypt certs automatically once DNS points here.
+{$DOMAIN} {
+	import app_routes app web
+}
+
+# Staging (compose.staging.yml), reached over the shared "edge" network.
+staging.{$DOMAIN} {
+	header X-Robots-Tag "noindex, nofollow"
+	import app_routes staging-app staging-web
 }
 
 # Basic auth in front of Grafana's own login: bots and password-guessers never reach Grafana.

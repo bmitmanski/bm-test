@@ -7,6 +7,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "tsc && node --test \"dist/test/**/*.test.js\"",
+    "test:e2e": "tsc && node --test \"dist/test/**/*.e2e.js\"",
     "start": "node dist/src/index.js",
     "dev": "tsx watch --env-file=.env.development src/index.ts | pino-pretty",
     "dev:web": "npm --prefix web run dev",

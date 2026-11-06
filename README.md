@@ -9,7 +9,8 @@ A small app (Fastify API + Vite frontend, TypeScript) with all the infrastructur
         │  CI: typecheck, tests,         │
         │  compose/Caddy/Alloy checks    │
         │  build images → GHCR           │
-        │  ssh → deploy.sh → smoke test  │
+        │  deploy → staging → e2e tests  │
+        │  same images → production      │
         └───────────────┬────────────────┘
                         ▼
   DNS  ──►  VM (Docker Compose, /opt/app)
@@ -21,7 +22,9 @@ A small app (Fastify API + Vite frontend, TypeScript) with all the infrastructur
                  ├─ redis      8 (password, AOF)
                  ├─ s3         SeaweedFS (S3-compatible)
                  ├─ alloy ──►  loki + prometheus ──► grafana (dashboard, alerts)
-                 └─ cron: backup.sh (pg_dump)
+                 ├─ cron: backup.sh (pg_dump)
+                 └─ staging    app, web, postgres, redis, s3 (compose.staging.yml)
+                               staging.your.domain, behind the same caddy, logs in the same Grafana
 
   Sentry (SaaS) ◄── exceptions + traces from browser and API
 ```
@@ -87,8 +90,18 @@ Public under `/api/...` (Caddy strips the prefix). `/metrics` is reachable only 
 
 ## Deploy and rollback
 
-Push to `main` → checks → images in GHCR → `deploy.sh` on the VM → smoke test of `/api/ready`.
-If the new containers are not healthy, `deploy.sh` rolls back to the previous images on its own.
+```
+push to main → checks → build images once (GHCR, tag = commit SHA)
+             → staging     deploy.sh + smoke test      https://staging.<domain>
+             → e2e         test/e2e/*.e2e.ts against staging: version, Postgres, Redis, S3 upload/download, routing
+             → production  the same images, deploy.sh + smoke test
+```
+
+- **Staging** runs on the same VM as a second compose project (`infra/compose.staging.yml`, env file `/opt/app/.env.staging`): its own database, Redis and S3, `DEBUG_ROUTES=true`, `environment: staging` in Sentry and `env="staging"` in Loki. The production Caddy routes `staging.<domain>` to it over a shared Docker network (`edge`).
+- **Shared infra** (Caddy, Loki, Prometheus, Alloy, Grafana) has one instance; it is updated in the staging step (`deploy.sh shared`).
+- If the new containers are not healthy, `deploy.sh` rolls back to the previous images on its own.
+- E2E locally: `BASE_URL=https://staging.<domain> npm run test:e2e`.
+- Optional manual gate: Settings → Environments → production → *Required reviewers*; the pipeline then waits for a click after e2e.
 
 Manual rollback: Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older commit (no rebuild).
 
@@ -98,7 +111,7 @@ Manual rollback: Actions → **Deploy** → *Run workflow* → `image_tag` = SHA
 - **DB migrations**: today `CREATE TABLE IF NOT EXISTS` at startup. Use a tool (drizzle-kit, node-pg-migrate) as a deploy step.
 - **Secrets management**: `.env` is edited by hand on the server. Next: SOPS + age in the repo, or Infisical/Doppler.
 - **Infrastructure as Code**: the VM and DNS are clicked together. OpenTofu/Terraform, and Ansible instead of `bootstrap-vps.sh`.
-- **Staging**: a second GitHub environment and a separate compose project/subdomain.
+- **Staging isolation**: staging shares the VM, Caddy and Grafana with production. Client projects usually give it its own VM or cloud project, so OS/firewall/Docker changes can be tried there first.
 - **Zero-downtime deploys**: `up -d` restarts the container (a few seconds of downtime). Fix: two replicas behind Caddy, or blue/green.
 - **Security**: Dependabot/Renovate, image scanning (Trivy), rate limiting. Grafana has basic auth + its own login; SSO (Cloudflare Access, IAP) would be stronger.
 - **Keyless deploys**: Workload Identity Federation + IAP instead of an SSH key in GitHub secrets.
