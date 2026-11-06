@@ -100,5 +100,5 @@ Manual rollback: Actions → **Deploy** → *Run workflow* → `image_tag` = SHA
 - **Infrastructure as Code**: the VM and DNS are clicked together. OpenTofu/Terraform, and Ansible instead of `bootstrap-vps.sh`.
 - **Staging**: a second GitHub environment and a separate compose project/subdomain.
 - **Zero-downtime deploys**: `up -d` restarts the container (a few seconds of downtime). Fix: two replicas behind Caddy, or blue/green.
-- **Security**: Grafana is public behind a password only. Add `basic_auth`/an IP allowlist in Caddy. Dependabot/Renovate, image scanning (Trivy), rate limiting.
+- **Security**: Dependabot/Renovate, image scanning (Trivy), rate limiting. Grafana has basic auth + its own login; SSO (Cloudflare Access, IAP) would be stronger.
 - **Keyless deploys**: Workload Identity Federation + IAP instead of an SSH key in GitHub secrets.

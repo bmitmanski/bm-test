@@ -45,7 +45,7 @@
 
 ## First steps
 
-1. `https://grafana.<domain>` → user `admin`, password from `GRAFANA_ADMIN_PASSWORD` in `/opt/app/.env`.
+1. `https://grafana.<domain>`: first the browser's basic-auth prompt (user `admin`, `GRAFANA_BASIC_AUTH_PASSWORD` from your `.env.setup`), then Grafana's login (user `admin`, `GRAFANA_ADMIN_PASSWORD` from `/opt/app/.env`).
 2. **Dashboards → bm-test → bm-test · app**:
    - **Overview**: is the API up, requests/s, 5xx, p95 latency, frontend errors, restarts.
    - **HTTP**: traffic by status, latency per endpoint, 4xx vs 5xx vs frontend, business events.
@@ -108,7 +108,7 @@ up{job="app"}                                                                   
 **5. Security.**
 - Strong admin password, sign-up disabled (already set in `compose.yml`).
 - Create a separate **Viewer** account for daily use instead of using `admin`.
-- Grafana is on the public internet: add `basic_auth` or an IP allowlist in Caddy, or put it behind Cloudflare Access.
+- Grafana is behind basic auth in Caddy plus its own login. Stronger options: an IP allowlist, or Cloudflare Access / Google IAP (SSO).
 - Use a **service account token** (Administration → Service accounts), not the admin password, for automation such as CI.
 
 **6. Ideas for the next step.**
@@ -169,7 +169,7 @@ You can use Slack, Discord or Telegram instead of e-mail (Alerting → Contact p
 
 ## Test scenarios (buttons in the UI)
 
-The **Test failures** buttons only work with `DEBUG_ROUTES=true` in `/opt/app/.env`. After changing it, run `docker compose up -d app`.
+The **Test failures** buttons only work with `DEBUG_ROUTES=true`. Production runs with `false` (anyone could crash the API); for a demo turn it on temporarily: `infra/scripts/server-env.sh --apply DEBUG_ROUTES=true`, and back off afterwards.
 
 | Button | Logs (Loki) | Metrics | Alert (after ~1–2 min) |
 |---|---|---|---|

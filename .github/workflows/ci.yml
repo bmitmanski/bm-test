@@ -36,7 +36,7 @@ jobs:
       - name: Validate compose file
         run: docker compose -f infra/compose.yml --env-file .env.example config -q
       - name: Validate Caddyfile
-        run: docker run --rm -e DOMAIN=example.com -e ACME_EMAIL=a@b.c -v "$PWD/infra/caddy:/etc/caddy:ro" caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile
+        run: docker run --rm -e DOMAIN=example.com -e ACME_EMAIL=a@b.c -e GRAFANA_BASIC_AUTH_HASH='$2a$14$dummy' -v "$PWD/infra/caddy:/etc/caddy:ro" caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile
       - name: Validate Alloy config
         run: docker run --rm -v "$PWD/infra/alloy:/etc/alloy:ro" grafana/alloy:v1.21.3 fmt /etc/alloy/config.alloy > /dev/null
       - name: Build API image

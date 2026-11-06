@@ -21,6 +21,13 @@
 	}
 }
 
+# Basic auth in front of Grafana's own login: bots and password-guessers never reach Grafana.
 grafana.{$DOMAIN} {
-	reverse_proxy grafana:3000
+	basic_auth {
+		admin {$GRAFANA_BASIC_AUTH_HASH}
+	}
+	reverse_proxy grafana:3000 {
+		# The browser keeps sending the basic-auth header; Grafana would treat it as its own login and reject it.
+		header_up -Authorization
+	}
 }

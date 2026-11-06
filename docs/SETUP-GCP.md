@@ -130,13 +130,24 @@ S3_ACCESS_KEY=$(openssl rand -hex 12)
 S3_SECRET_KEY=$(openssl rand -hex 24)
 GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)
 LOG_LEVEL=info
-DEBUG_ROUTES=true
+DEBUG_ROUTES=false
 ALERT_EMAIL=$ACME_EMAIL
 # SMTP for alert e-mails, see docs/OBSERVABILITY.md (optional, alerts work in the UI without it)
 SMTP_ENABLED=false
 EOF
 ssh -i ~/.ssh/bm-test-deploy deploy@$IP 'chmod 600 /opt/app/.env && grep GRAFANA /opt/app/.env'
 ```
+
+**Basic auth in front of Grafana** (a second lock before Grafana's own login; user `admin`). Only the bcrypt hash goes to the server, the password stays in your `.env.setup`:
+
+```bash
+PW=$(openssl rand -hex 12) && echo "GRAFANA_BASIC_AUTH_PASSWORD=$PW" >> .env.setup
+HASH=$(docker run --rm caddy:2.11-alpine caddy hash-password --plaintext "$PW")
+# Single quotes keep the $ signs of the hash literal for Docker Compose.
+printf "GRAFANA_BASIC_AUTH_HASH='%s'\n" "$HASH" | ssh -i ~/.ssh/bm-test-deploy deploy@$IP "cat >> /opt/app/.env"
+```
+
+`DEBUG_ROUTES=false`: the endpoints that deliberately fail (`/debug/*`, the *Test failures* buttons) must not be public in production, anyone could crash the API. Turn them on only temporarily, for a demo.
 
 Save the Grafana password. Run this **once**: Grafana only applies `GRAFANA_ADMIN_PASSWORD` on its very first start. If you change it later, reset it in Grafana:
 
@@ -148,7 +159,7 @@ ssh -i ~/.ssh/bm-test-deploy deploy@$IP 'cd /opt/app && set -a && . ./.env && se
 **Changing variables later** (run locally; it backs up the old file to `/opt/app/.env.bak`):
 
 ```bash
-infra/scripts/server-env.sh DEBUG_ROUTES=true ALERT_EMAIL=you@gmail.com           # only edit .env
+infra/scripts/server-env.sh ALERT_EMAIL=you@gmail.com                             # only edit .env
 infra/scripts/server-env.sh --apply SMTP_ENABLED=true SMTP_PASSWORD=xxxx          # edit + recreate changed containers
 infra/scripts/server-env.sh --list                                                # variable names, values hidden
 ```
