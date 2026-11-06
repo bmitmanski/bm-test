@@ -190,7 +190,16 @@ gh secret set VPS_KNOWN_HOSTS --env production --body "$(ssh-keyscan -t ed25519 
 gh variable set DOMAIN        --env production --body "$DOMAIN"
 ```
 
-Optional: Settings → Environments → production → *Required reviewers* (manual approval of deploys), and Settings → Branches → protect `main` with the CI check required.
+Manual approval before production (required reviewers; free on public repos, private ones need GitHub Pro/Team):
+
+```bash
+gh api -X PUT repos/$REPO/environments/production --input - <<EOF
+{"reviewers":[{"type":"User","id":$(gh api user -q .id)}],"prevent_self_review":false,
+ "deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+EOF
+```
+
+Optional: Settings → Branches → protect `main` with the CI check required.
 
 **7.3. First commit and push** (deploys run from `main`):
 

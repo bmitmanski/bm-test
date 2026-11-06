@@ -94,6 +94,7 @@ Public under `/api/...` (Caddy strips the prefix). `/metrics` is reachable only 
 push to main → checks → build images once (GHCR, tag = commit SHA)
              → staging     deploy.sh + smoke test      https://staging.<domain>
              → e2e         test/e2e/*.e2e.ts against staging: version, Postgres, Redis, S3 upload/download, routing
+             → approval    a human clicks Approve (GitHub environment protection)
              → production  the same images, deploy.sh + smoke test
 ```
 
@@ -101,7 +102,7 @@ push to main → checks → build images once (GHCR, tag = commit SHA)
 - **Shared infra** (Caddy, Loki, Prometheus, Alloy, Grafana) has one instance; it is updated in the staging step (`deploy.sh shared`).
 - If the new containers are not healthy, `deploy.sh` rolls back to the previous images on its own.
 - E2E locally: `BASE_URL=https://staging.<domain> npm run test:e2e`.
-- Optional manual gate: Settings → Environments → production → *Required reviewers*; the pipeline then waits for a click after e2e.
+- **Manual approval before production**: the `production` environment has a required reviewer, so after e2e the run waits for *Review deployments → Approve* (also for rollbacks). Free on public repos; private repos need GitHub Pro/Team.
 
 Manual rollback: Actions → **Deploy** → *Run workflow* → `image_tag` = SHA of an older commit (no rebuild).
 
